@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import FeatureSideNav from '@/components/FeatureSideNav';
 
@@ -89,8 +88,7 @@ export default function Feature4Page() {
   const labelModeRef = useRef<LabelMode>('bond');
   const measurementsRef = useRef<MeasureItem[]>([]);
 
-  const searchParams = useSearchParams();
-  const demoPdbUrl = searchParams.get('pdb');
+  const [demoPdbUrl, setDemoPdbUrl] = useState<string | null>(null);
 
   const [pdbFile, setPdbFile] = useState<File | null>(null);
   const [pdbText, setPdbText] = useState('');
@@ -316,6 +314,11 @@ export default function Feature4Page() {
   useEffect(() => {
     const ready = typeof window !== 'undefined' && !!window.$3Dmol;
     setIsReady(ready);
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      setDemoPdbUrl(url.searchParams.get('pdb'));
+    }
   }, []);
 
   useEffect(() => {
