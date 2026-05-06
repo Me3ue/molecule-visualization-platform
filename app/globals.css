@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import './animations.css';
+
+:root {
+  --background: 222 47% 7%;
+  --foreground: 210 40% 98%;
+  --card: 224 45% 10%;
+  --card-foreground: 210 40% 98%;
+  --popover: 224 45% 10%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 280 89% 70%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 192 84% 42%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 225 20% 20%;
+  --muted-foreground: 220 14% 74%;
+  --accent: 165 87% 46%;
+  --accent-foreground: 222 47% 7%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 223 20% 26%;
+  --input: 223 20% 26%;
+  --ring: 280 89% 70%;
+  --radius: 1rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at 10% 15%, rgba(88, 28, 135, 0.35) 0%, transparent 30%),
+    radial-gradient(circle at 85% 10%, rgba(14, 165, 233, 0.3) 0%, transparent 35%),
+    radial-gradient(circle at 40% 90%, rgba(16, 185, 129, 0.22) 0%, transparent 30%),
+    linear-gradient(145deg, #05070f 0%, #0b1020 55%, #0b1325 100%);
+  font-feature-settings: "liga" 1, "calt" 1;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer utilities {
+  .glass-panel {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(14px);
+  }
+
+  .section-grid {
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .btn-primary {
+    @apply rounded-full bg-gradient-to-r from-fuchsia-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90;
+  }
+
+  .btn-secondary {
+    @apply rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-slate-100 transition hover:bg-white/20;
+  }
+
+  .btn-danger {
+    @apply rounded-lg bg-red-500/80 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-500;
+  }
+
+  .ui-card {
+    @apply rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-md;
+  }
+
+  .ui-input {
+    @apply rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-400 focus:border-cyan-300/60;
+  }
+
+  .ui-select {
+    @apply rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-300/60;
+  }
+
+  .ui-legend {
+    @apply glass-panel rounded-2xl border border-white/20 p-3 text-slate-100;
+  }
+}
