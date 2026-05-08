@@ -14,6 +14,9 @@ type TrajFormat = 'pdb' | 'xyz' | 'sdf' | 'mol2' | 'xtc' | 'gro';
 type Point3D = { x: number; y: number; z: number };
 type SeriesPoint = { t: number; rmsd: number; rg: number };
 
+const DEFAULT_GRO_URL = '/demo/pull_nopbc.gro';
+const DEFAULT_XTC_URL = '/demo/pull_nopbc.xtc';
+
 const formats: { value: TrajFormat; label: string; accept: string }[] = [
   { value: 'pdb', label: 'PDB（多 MODEL）', accept: '.pdb' },
   { value: 'xyz', label: 'XYZ（多帧）', accept: '.xyz' },
@@ -227,6 +230,7 @@ export default function Feature6TrajectoryAnalysisPage() {
   const [frameCount, setFrameCount] = useState(0);
   const [atomCount, setAtomCount] = useState(0);
   const [series, setSeries] = useState<SeriesPoint[]>([]);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   const topologyAccept = useMemo(() => formats.find((f) => f.value === topologyFormat)?.accept ?? '.pdb', [topologyFormat]);
   const trajectoryAccept = useMemo(() => formats.find((f) => f.value === trajectoryFormat)?.accept ?? '.pdb', [trajectoryFormat]);
@@ -248,6 +252,26 @@ export default function Feature6TrajectoryAnalysisPage() {
       }
     };
   }, []);
+
+  const loadDefaultDemo = async () => {
+    try {
+      setIsDemoLoading(true);
+      setStatus('正在加载默认 GRO + XTC 示例...');
+      const [groRes, xtcRes] = await Promise.all([fetch(DEFAULT_GRO_URL), fetch(DEFAULT_XTC_URL)]);
+      if (!groRes.ok) throw new Error(`GRO HTTP ${groRes.status}`);
+      if (!xtcRes.ok) throw new Error(`XTC HTTP ${xtcRes.status}`);
+      const [groBlob, xtcBlob] = await Promise.all([groRes.blob(), xtcRes.blob()]);
+      setTopologyFormat('gro');
+      setTrajectoryFormat('xtc');
+      setTopologyFile(new File([groBlob], 'pull_nopbc.gro', { type: 'application/octet-stream' }));
+      setTrajectoryFile(new File([xtcBlob], 'pull_nopbc.xtc', { type: 'application/octet-stream' }));
+      setStatus('默认示例已就绪，点击“开始分析”即可。');
+    } catch (e: any) {
+      setStatus(`默认示例加载失败：${e?.message || '未知错误'}`);
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
 
   const analyze = async () => {
     if (!topologyFile || !trajectoryFile) return setStatus('请先同时上传拓扑文件和轨迹文件。');
@@ -397,6 +421,12 @@ export default function Feature6TrajectoryAnalysisPage() {
     }
   };
 
+  useEffect(() => {
+    if (!isNglReady || isDemoLoading) return;
+    if (topologyFile || trajectoryFile) return;
+    loadDefaultDemo();
+  }, [isNglReady]);
+
   const maxRmsd = Math.max(...series.map((s) => s.rmsd), 1);
   const maxRg = Math.max(...series.map((s) => s.rg), 1);
 
@@ -419,8 +449,10 @@ export default function Feature6TrajectoryAnalysisPage() {
               <div className="ui-card space-y-4">
                 <select className="ui-select w-full" value={topologyFormat} onChange={(e) => setTopologyFormat(e.target.value as TrajFormat)}>{formats.map((f) => <option key={`t-${f.value}`} value={f.value}>{f.label}</option>)}</select>
                 <input className="ui-input w-full" type="file" accept={topologyAccept} onChange={(e) => setTopologyFile(e.target.files?.[0] ?? null)} />
+                <p className="text-xs text-slate-400">当前拓扑文件：{topologyFile?.name ?? '未选择'}</p>
                 <select className="ui-select w-full" value={trajectoryFormat} onChange={(e) => setTrajectoryFormat(e.target.value as TrajFormat)}>{formats.map((f) => <option key={`x-${f.value}`} value={f.value}>{f.label}</option>)}</select>
                 <input className="ui-input w-full" type="file" accept={trajectoryAccept} onChange={(e) => setTrajectoryFile(e.target.files?.[0] ?? null)} />
+                <p className="text-xs text-slate-400">当前轨迹文件：{trajectoryFile?.name ?? '未选择'}</p>
                 <button className="btn-primary w-full" onClick={analyze} disabled={isLoading || (topologyFormat === 'gro' && trajectoryFormat === 'xtc' && !isNglReady)}>{isLoading ? '分析中...' : '开始分析'}</button>
                 <div className="ui-card text-xs text-slate-300"><p>{status}</p><p className="mt-1">帧数: {frameCount} | 原子数: {atomCount}</p></div>
               </div>

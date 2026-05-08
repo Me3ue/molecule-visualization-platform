@@ -95,7 +95,7 @@ export const translations = {
       email: "Email",
       followUs: "Follow Us",
       comingSoon: "More information coming soon...",
-      copyright: "Copyright © 2024 HIT. All Rights Reserved."
+      copyright: "Copyright © 2026 HIT. All Rights Reserved."
     }
   }
 };

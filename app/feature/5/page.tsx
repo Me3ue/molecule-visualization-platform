@@ -23,6 +23,9 @@ const trajectoryFormats = [
   { value: 'rst7', label: 'Amber RST7（需配合 PRMTOP）', accept: '.rst7,.inpcrd,.restrt,.crd' },
 ] as const;
 
+const DEFAULT_GRO_URL = '/demo/pull_nopbc.gro';
+const DEFAULT_XTC_URL = '/demo/pull_nopbc.xtc';
+
 const topologyFormats = [
   { value: 'pdb', label: 'PDB', accept: '.pdb' },
   { value: 'sdf', label: 'SDF', accept: '.sdf' },
@@ -62,6 +65,8 @@ export default function MolecularDynamicsTrajectoryPage() {
   const [isNglReady, setIsNglReady] = useState(false);
   const [is3DmolReady, setIs3DmolReady] = useState(false);
   const [showReference, setShowReference] = useState(false);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const currentTrajAccept = useMemo(
     () => trajectoryFormats.find((f) => f.value === trajFormat)?.accept ?? '.pdb',
@@ -79,6 +84,10 @@ export default function MolecularDynamicsTrajectoryPage() {
   );
 
   const isEngineReady = requiresNgl ? isNglReady : is3DmolReady;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -239,16 +248,18 @@ export default function MolecularDynamicsTrajectoryPage() {
     setCurrentFrame(safeFrame);
   };
 
-  const loadTrajectory = async () => {
-    if (!topologyFile || !trajectoryFile) return setStatus('请先同时上传拓扑文件和轨迹文件。');
+  const loadTrajectory = async (inputTopologyFile?: File, inputTrajectoryFile?: File) => {
+    const topFile = inputTopologyFile ?? topologyFile;
+    const trajFile = inputTrajectoryFile ?? trajectoryFile;
+    if (!topFile || !trajFile) return setStatus('请先同时上传拓扑文件和轨迹文件。');
 
     try {
       setIsLoading(true);
       clearTimer();
       setIsPlaying(false);
 
-      const topExt = getFileExt(topologyFile);
-      const trajExt = getFileExt(trajectoryFile);
+      const topExt = getFileExt(topFile);
+      const trajExt = getFileExt(trajFile);
       const isGroXtcByName = topExt === 'gro' && trajExt === 'xtc';
       const amberTopExtSet = new Set(['prmtop', 'parm7', 'top']);
       const amberTrajExtSet = new Set(['rst7', 'inpcrd', 'restrt', 'crd']);
@@ -275,7 +286,7 @@ export default function MolecularDynamicsTrajectoryPage() {
         stage.removeAllComponents();
         stage.removeAllRepresentations?.();
 
-        const trajectory = await trajectoryFile.text();
+        const trajectory = await trajFile.text();
         const extractMolBlock = (s: string) => {
           const lines = s.split(/\r?\n/);
           const endIdx = lines.findIndex((line) => line.trim() === 'M  END' || line.trim() === 'M END');
@@ -346,8 +357,8 @@ export default function MolecularDynamicsTrajectoryPage() {
         stage.removeAllComponents();
         stage.removeAllRepresentations?.();
 
-        groUrlRef.current = URL.createObjectURL(topologyFile);
-        xtcUrlRef.current = URL.createObjectURL(trajectoryFile);
+        groUrlRef.current = URL.createObjectURL(topFile);
+        xtcUrlRef.current = URL.createObjectURL(trajFile);
 
         const topExt = useAmber ? 'prmtop' : 'gro';
         const trajExt = useAmber ? 'rst7' : 'xtc';
@@ -366,8 +377,8 @@ export default function MolecularDynamicsTrajectoryPage() {
           let convertErrorMsg = '';
           try {
             const formData = new FormData();
-            formData.append('topology', topologyFile);
-            formData.append('trajectory', trajectoryFile);
+            formData.append('topology', topFile);
+            formData.append('trajectory', trajFile);
 
             const resp = await fetch('/api/trajectory/convert-rst7', {
               method: 'POST',
@@ -416,7 +427,7 @@ export default function MolecularDynamicsTrajectoryPage() {
             convertErrorMsg = e?.message || String(e) || '后台转换请求异常';
           }
 
-          const fileTrajExt = getFileExt(trajectoryFile);
+          const fileTrajExt = getFileExt(trajFile);
           const coordExtCandidates = Array.from(new Set([
             fileTrajExt,
             'crd',
@@ -461,40 +472,18 @@ export default function MolecularDynamicsTrajectoryPage() {
         };
 
         const NGLAny = (window as any).NGL;
-        const blobDatasource = {
-          getUrl: (u: string) => u,
-          getCountUrl: (u: string) => u,
-        };
-        NGLAny?.DatasourceRegistry?.add?.('blob', blobDatasource);
-        NGLAny?.DatasourceRegistry?.add?.('blob:', blobDatasource);
 
         let trajPlayer: any;
-        let errA: any = null;
-        let errB: any = null;
-
         try {
-          const trajBuffer = await trajectoryFile.arrayBuffer();
-          const trajNamedFile = new File([trajBuffer], trajectoryFile.name || `trajectory.${trajExt}`, {
+          const trajBuffer = await trajFile.arrayBuffer();
+          const trajNamedFile = new File([trajBuffer], trajFile.name || `trajectory.${trajExt}`, {
             type: 'application/octet-stream',
           });
           const trajData = await NGLAny.autoLoad(trajNamedFile, { ext: trajExt });
           trajPlayer = await structureComp.addTrajectory(trajData, trajParams);
-        } catch (e1: any) {
-          errA = e1;
-        }
-
-        if (!trajPlayer) {
-          try {
-            trajPlayer = await structureComp.addTrajectory(xtcUrlRef.current, trajParams);
-          } catch (e2: any) {
-            errB = e2;
-          }
-        }
-
-        if (!trajPlayer) {
-          const msg1 = errA?.message || String(errA || 'unknown');
-          const msg2 = errB?.message || String(errB || 'unknown');
-          throw new Error(`${modeLabel} 轨迹加载失败：${msg1}；URL重试后仍失败：${msg2}`);
+        } catch (e: any) {
+          const msg = e?.message || String(e || 'unknown');
+          throw new Error(`${modeLabel} 轨迹加载失败：${msg}`);
         }
 
         const trajObj = trajPlayer?.trajectory ?? structureComp?.trajList?.[0]?.trajectory ?? trajPlayer;
@@ -544,8 +533,8 @@ export default function MolecularDynamicsTrajectoryPage() {
         return;
       }
 
-      const topology = await topologyFile.text();
-      const trajectory = await trajectoryFile.text();
+      const topology = await topFile.text();
+      const trajectory = await trajFile.text();
 
       const extractMolBlock = (s: string) => {
         const lines = s.split(/\r?\n/);
@@ -660,6 +649,40 @@ export default function MolecularDynamicsTrajectoryPage() {
       setIsLoading(false);
     }
   };
+
+  const loadDefaultDemo = async () => {
+    try {
+      setIsDemoLoading(true);
+      setStatus('正在加载默认 GRO + XTC 示例...');
+      const [groRes, xtcRes] = await Promise.all([fetch(DEFAULT_GRO_URL), fetch(DEFAULT_XTC_URL)]);
+      if (!groRes.ok) throw new Error(`GRO HTTP ${groRes.status}`);
+      if (!xtcRes.ok) throw new Error(`XTC HTTP ${xtcRes.status}`);
+      const [groBlob, xtcBlob] = await Promise.all([groRes.blob(), xtcRes.blob()]);
+      const groFile = new File([groBlob], 'pull_nopbc.gro', { type: 'application/octet-stream' });
+      const xtcFile = new File([xtcBlob], 'pull_nopbc.xtc', { type: 'application/octet-stream' });
+      setTopologyFormat('gro');
+      setTrajFormat('xtc');
+      setTopologyFile(groFile);
+      setTrajectoryFile(xtcFile);
+      await loadTrajectory(groFile, xtcFile);
+    } catch (e: any) {
+      const msg = e?.message || '未知错误';
+      setStatus(`默认示例加载失败：${msg}`);
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isEngineReady || isLoading || isDemoLoading) return;
+    if (topologyFile || trajectoryFile) return;
+    loadDefaultDemo();
+  }, [mounted, isEngineReady]);
 
   const saveSnapshot = async () => {
     try {
@@ -781,13 +804,15 @@ export default function MolecularDynamicsTrajectoryPage() {
                   {topologyFormats.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
                 <input type="file" accept={currentTopologyAccept} onChange={(e) => setTopologyFile(e.target.files?.[0] ?? null)} className="ui-input w-full" />
+                <p className="text-xs text-slate-400">当前拓扑文件：{topologyFile?.name ?? '未选择'}</p>
                 <select value={trajFormat} onChange={(e) => setTrajFormat(e.target.value as TrajFormat)} className="ui-select w-full">
                   {trajectoryFormats.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
                 <input type="file" accept={currentTrajAccept} onChange={(e) => setTrajectoryFile(e.target.files?.[0] ?? null)} className="ui-input w-full" />
+                <p className="text-xs text-slate-400">当前轨迹文件：{trajectoryFile?.name ?? '未选择'}</p>
                 <button
                   type="button"
-                  onClick={loadTrajectory}
+                  onClick={() => loadTrajectory()}
                   className="btn-primary w-full"
                   disabled={isLoading || !isEngineReady}
                 >

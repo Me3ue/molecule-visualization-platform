@@ -11,6 +11,8 @@ declare global {
   }
 }
 
+const DEFAULT_PDB_URL = '/demo/1CRN.pdb';
+
 const colorSchemes = [
   { id: 'elementColors', name: '元素配色', icon: '⚛️', description: '根据原子类型显示不同颜色' },
   { id: 'hydrophobic', name: '疏水性配色', icon: '💧', description: '红色疏水、蓝色亲水' },
@@ -19,6 +21,39 @@ const colorSchemes = [
   { id: 'conservation', name: '序列保守性', icon: '🧬', description: '进化保守程度' },
   { id: 'atomHighlight', name: '原子高亮', icon: '💡', description: '点击原子高亮' },
 ];
+
+const colorLegends: Record<string, { label: string; color: string }[]> = {
+  elementColors: [
+    { label: 'C（碳）', color: '#9ca3af' },
+    { label: 'N（氮）', color: '#3b82f6' },
+    { label: 'O（氧）', color: '#ef4444' },
+    { label: 'S（硫）', color: '#eab308' },
+  ],
+  hydrophobic: [
+    { label: '疏水区域', color: '#ef4444' },
+    { label: '亲水区域', color: '#3b82f6' },
+    { label: '过渡区域', color: '#e5e7eb' },
+  ],
+  electrostatic: [
+    { label: '负电势', color: '#ef4444' },
+    { label: '中性', color: '#e5e7eb' },
+    { label: '正电势', color: '#3b82f6' },
+  ],
+  bFactor: [
+    { label: '低 B 因子', color: '#60a5fa' },
+    { label: '中等', color: '#e5e7eb' },
+    { label: '高 B 因子', color: '#ef4444' },
+  ],
+  conservation: [
+    { label: '低保守性', color: '#60a5fa' },
+    { label: '中保守性', color: '#f59e0b' },
+    { label: '高保守性', color: '#ef4444' },
+  ],
+  atomHighlight: [
+    { label: '普通原子', color: '#9ca3af' },
+    { label: '高亮原子', color: '#facc15' },
+  ],
+};
 
 export default function Feature2Page() {
   const viewerRef = useRef<any>(null);
@@ -37,6 +72,7 @@ export default function Feature2Page() {
   const [backgroundColor, setBackgroundColor] = useState('black');
   const [isLoading, setIsLoading] = useState(false);
   const [is3DMolReady, setIs3DMolReady] = useState(false);
+  const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.$3Dmol) {
@@ -353,15 +389,45 @@ export default function Feature2Page() {
     }
   };
 
+  const applyPdbContent = (content: string, fileName: string) => {
+    setPdb(content);
+    setPdbFile(new File([content], fileName, { type: 'chemical/x-pdb' }));
+  };
+
+  const loadRemotePdb = async (url: string) => {
+    if (!url) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const content = await res.text();
+      if (!content.trim()) throw new Error('empty content');
+      const remoteName = url.split('?')[0].split('/').pop() || 'default.pdb';
+      applyPdbContent(content, remoteName);
+    } catch {
+      setDebugInfo('默认示例加载失败，请检查 /demo/1CRN.pdb 是否可访问');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !file.name.endsWith('.pdb')) return;
     setIsLoading(true);
     const content = await file.text();
-    setPdb(content);
-    setPdbFile(file);
+    applyPdbContent(content, file.name);
     setIsLoading(false);
   };
+
+  useEffect(() => {
+    const boot = async () => {
+      const url = new URL(window.location.href);
+      const pdbUrl = url.searchParams.get('pdb') || DEFAULT_PDB_URL;
+      await loadRemotePdb(pdbUrl);
+    };
+    boot();
+  }, []);
 
   useEffect(() => {
     if (!pdb) return;
@@ -449,6 +515,10 @@ export default function Feature2Page() {
             <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
               <div className="ui-card space-y-3">
                 <input type="file" accept=".pdb" onChange={upload} className="ui-input w-full" />
+                <p className="text-xs text-slate-400">当前文件：{pdbFile?.name ?? '未选择'}</p>
+                <button type="button" className="btn-secondary w-full" onClick={() => loadRemotePdb(DEFAULT_PDB_URL)} disabled={isLoading}>
+                  {isLoading ? '默认示例加载中...' : '恢复默认演示结构'}
+                </button>
 
                 {activeTab === 'coloring' && (
                   <>
@@ -519,6 +589,28 @@ export default function Feature2Page() {
                   ref={containerRef}
                   className="h-[620px] w-full rounded-2xl border border-white/10 bg-slate-950/70"
                 />
+                {activeTab === 'coloring' && pdb && (
+                  <div className="absolute right-4 top-4 z-10 w-56 rounded-xl border border-white/20 bg-slate-900/85 p-3 backdrop-blur-sm">
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between text-xs font-semibold text-cyan-200"
+                      onClick={() => setIsLegendCollapsed((v) => !v)}
+                    >
+                      <span>当前配色图例</span>
+                      <span className="text-slate-300">{isLegendCollapsed ? '展开' : '收起'}</span>
+                    </button>
+                    {!isLegendCollapsed && (
+                      <div className="space-y-1.5 mt-2">
+                        {(colorLegends[scheme] || []).map((item) => (
+                          <div key={`${scheme}-${item.label}`} className="flex items-center gap-2 text-xs text-slate-200">
+                            <span className="inline-block h-3 w-3 rounded-sm border border-white/20" style={{ backgroundColor: item.color }} />
+                            <span>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {isLoading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-2xl">
                     <p className="text-cyan-300">加载中...</p>

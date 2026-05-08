@@ -15,6 +15,9 @@ type AtomPick = {
   label: string;
 };
 
+const DEFAULT_GRO_URL = '/demo/pull_nopbc.gro';
+const DEFAULT_XTC_URL = '/demo/pull_nopbc.xtc';
+
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 const distance3 = (a: [number, number, number], b: [number, number, number]) => {
@@ -56,6 +59,7 @@ export default function Feature7BondDistanceTrajectoryPage() {
   const [threshold, setThreshold] = useState(5);
   const [timeStepPs, setTimeStepPs] = useState(2);
   const [status, setStatus] = useState('请上传 GROMACS 拓扑（.gro）和轨迹（.xtc）。');
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   const currentDistance = distanceSeries[frame] ?? null;
   const aboveThresholdCount = distanceSeries.filter((d) => d >= threshold).length;
@@ -236,6 +240,24 @@ export default function Feature7BondDistanceTrajectoryPage() {
     }
   };
 
+  const loadDefaultDemo = async () => {
+    try {
+      setIsDemoLoading(true);
+      setStatus('正在加载默认 GRO + XTC 示例...');
+      const [groRes, xtcRes] = await Promise.all([fetch(DEFAULT_GRO_URL), fetch(DEFAULT_XTC_URL)]);
+      if (!groRes.ok) throw new Error(`GRO HTTP ${groRes.status}`);
+      if (!xtcRes.ok) throw new Error(`XTC HTTP ${xtcRes.status}`);
+      const [groBlob, xtcBlob] = await Promise.all([groRes.blob(), xtcRes.blob()]);
+      setTopologyFile(new File([groBlob], 'pull_nopbc.gro', { type: 'application/octet-stream' }));
+      setTrajectoryFile(new File([xtcBlob], 'pull_nopbc.xtc', { type: 'application/octet-stream' }));
+      setStatus('默认示例已就绪，正在自动加载...');
+    } catch (e: any) {
+      setStatus(`默认示例加载失败：${e?.message || '未知错误'}`);
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
+
   const loadGromacs = async () => {
     if (!topologyFile || !trajectoryFile) {
       setStatus('请同时上传 .gro 与 .xtc 文件。');
@@ -365,6 +387,17 @@ export default function Feature7BondDistanceTrajectoryPage() {
   }, []);
 
   useEffect(() => {
+    if (!isNglReady || isDemoLoading) return;
+    if (!topologyFile || !trajectoryFile) {
+      loadDefaultDemo();
+      return;
+    }
+    if (frameCount === 0 && !isLoading) {
+      loadGromacs();
+    }
+  }, [isNglReady, topologyFile, trajectoryFile]);
+
+  useEffect(() => {
     const stage = nglStageRef.current;
     if (!stage) return;
 
@@ -489,23 +522,25 @@ export default function Feature7BondDistanceTrajectoryPage() {
             <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
               <div className="space-y-4">
                 <div className="ui-card space-y-3">
-                  <h3 className="text-white font-semibold">1) 导入 GROMACS 轨迹</h3>
+                  <h3 className="text-white font-semibold">导入 GROMACS 轨迹</h3>
 
                   <label className="text-sm text-slate-300">拓扑（.gro）</label>
                   <input
+                    className="ui-input w-full"
                     type="file"
                     accept=".gro"
                     onChange={(e) => setTopologyFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-200 file:px-3 file:py-2"
                   />
+                  <p className="text-xs text-slate-400">当前拓扑文件：{topologyFile?.name ?? '未选择'}</p>
 
                   <label className="text-sm text-slate-300">轨迹（.xtc）</label>
                   <input
+                    className="ui-input w-full"
                     type="file"
                     accept=".xtc"
                     onChange={(e) => setTrajectoryFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-200 file:px-3 file:py-2"
                   />
+                  <p className="text-xs text-slate-400">当前轨迹文件：{trajectoryFile?.name ?? '未选择'}</p>
 
                   <button className="btn-primary w-full" onClick={loadGromacs} disabled={isLoading || !isNglReady}>
                     {isLoading ? '加载中...' : '加载 GRO + XTC'}
@@ -513,7 +548,7 @@ export default function Feature7BondDistanceTrajectoryPage() {
                 </div>
 
                 <div className="ui-card space-y-3">
-                  <h3 className="text-white font-semibold">2) 点击选择两个原子</h3>
+                  <h3 className="text-white font-semibold">选择两个原子</h3>
                   <p className="text-sm text-slate-300">在右侧 3D 视图直接点击原子。已选择 2 个后，再点会重新开始选择（可锁定避免误点）。</p>
                   <div className="text-sm text-slate-200 space-y-1">
                     <p>A: {pickedAtoms[0]?.label ?? '-'}</p>
@@ -566,7 +601,7 @@ export default function Feature7BondDistanceTrajectoryPage() {
                 </div>
 
                 <div className="ui-card space-y-3">
-                  <h3 className="text-white font-semibold">3) 播放与帧控制</h3>
+                  <h3 className="text-white font-semibold">播放与帧控制</h3>
 
                   <div className="grid grid-cols-2 gap-2">
                     <button className="btn-secondary" onClick={() => setIsPlaying((v) => !v)} disabled={frameCount <= 1}>
@@ -611,7 +646,7 @@ export default function Feature7BondDistanceTrajectoryPage() {
                 </div>
 
                 <div className="ui-card">
-                  <h3 className="text-white font-semibold mb-3">距离-帧曲线（VMD Graph 风格）</h3>
+                  <h3 className="text-white font-semibold mb-3">距离-帧曲线</h3>
                   {distanceSeries.length > 0 ? (
                     <div className="rounded-xl bg-slate-900/60 p-3 border border-white/10">
                       <svg viewBox="0 0 760 280" className="w-full h-auto">

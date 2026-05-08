@@ -32,6 +32,8 @@ type GraphicsItem =
 
 type LabelItem = { id: number; molId: number; atomIndex: number; text: string };
 
+const DEFAULT_PDB_URL = '/demo/5P21.pdb';
+
 const massTable: Record<string, number> = { H: 1.008, C: 12.011, N: 14.007, O: 15.999, P: 30.974, S: 32.06, F: 18.998, CL: 35.45, BR: 79.904, I: 126.9 };
 
 function parsePdbAtoms(content: string): Atom[] {
@@ -898,6 +900,30 @@ export default function Feature8VmdCommandPage() {
     currentMolIdRef.current = currentMolId;
     if (currentMol) renderMolecule(currentMol);
   }, [molecules, selections, currentMolId, displayState, graphics, labels, lightOn, is3DmolReady]);
+
+  useEffect(() => {
+    if (!is3DmolReady || molecules.length > 0) return;
+    const loadDefault = async () => {
+      try {
+        const res = await fetch(DEFAULT_PDB_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const content = await res.text();
+        if (!content.trim()) throw new Error('empty content');
+        const atoms = parsePdbAtoms(content);
+        const mol: Molecule = { id: 0, name: '5P21.pdb', content, atoms };
+        setFiles((prev) => {
+          if (prev.some((f) => f.name.toLowerCase() === '5p21.pdb')) return prev;
+          return [...prev, { name: '5P21.pdb', content }];
+        });
+        setMolecules([mol]);
+        setCurrentMolId(0);
+        log('已自动加载默认示例: 5P21.pdb');
+      } catch {
+        log('默认示例加载失败，请手动上传 PDB。');
+      }
+    };
+    loadDefault();
+  }, [is3DmolReady]);
 
   return (
     <>

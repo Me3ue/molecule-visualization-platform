@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Script from 'next/script';
 import FeatureSideNav from '@/components/FeatureSideNav';
+
+const DEFAULT_PDB_URL = '/demo/1CRN.pdb';
 
 const viewOptions = [
   { id: 'cartoon', name: '基础视图' },
@@ -16,6 +18,7 @@ export default function Feature1Page() {
   const [pdbContent, setPdbContent] = useState('');
   const [selectedView, setSelectedView] = useState('cartoon');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRemoteLoading, setIsRemoteLoading] = useState(false);
   const viewerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +69,33 @@ export default function Feature1Page() {
     if (pdbContent) displayMolecule(pdbContent, viewId);
   };
 
+  const loadRemotePdb = async (url: string) => {
+    if (!url) return;
+    setIsRemoteLoading(true);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const content = await res.text();
+      if (!content.trim()) throw new Error('empty content');
+      const remoteName = url.split('?')[0].split('/').pop() || 'default.pdb';
+      setPdbContent(content);
+      setSelectedFile(new File([content], remoteName, { type: 'chemical/x-pdb' }));
+      if (!viewerRef.current) initViewer(content);
+      else displayMolecule(content, selectedView);
+    } finally {
+      setIsRemoteLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const boot = async () => {
+      const url = new URL(window.location.href);
+      const pdbUrl = url.searchParams.get('pdb') || DEFAULT_PDB_URL;
+      await loadRemotePdb(pdbUrl);
+    };
+    boot();
+  }, []);
+
   return (
     <>
       <Script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" strategy="beforeInteractive" />
@@ -84,6 +114,10 @@ export default function Feature1Page() {
               <div className="ui-card space-y-3">
                 <label className="text-sm text-slate-200">上传 PDB</label>
                 <input type="file" accept=".pdb" onChange={handleFileUpload} className="ui-input w-full" />
+                <p className="text-xs text-slate-400">当前文件：{selectedFile?.name ?? '未选择'}</p>
+                <button type="button" className="btn-secondary w-full" onClick={() => loadRemotePdb(DEFAULT_PDB_URL)} disabled={isRemoteLoading}>
+                  {isRemoteLoading ? '默认示例加载中...' : '恢复默认演示结构'}
+                </button>
                 {viewOptions.map((v) => (
                   <button key={v.id} type="button" className={`w-full rounded-xl px-3 py-2 text-left ${selectedView === v.id ? 'bg-cyan-500/30 text-white' : 'bg-white/5 text-slate-200'}`} onClick={() => changeView(v.id)}>
                     {v.name}

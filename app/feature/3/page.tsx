@@ -24,6 +24,8 @@ function filterAtomsBySelector(atoms: any[], selector: any): any[] {
   });
 }
 
+const DEFAULT_PDB_URL = '/demo/5P21.pdb';
+
 export default function Feature3Page() {
   const viewerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,23 @@ export default function Feature3Page() {
     }
     return viewerRef.current;
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const checkReady = () => {
+      if (!mounted) return;
+      const ready = typeof window !== 'undefined' && !!window.$3Dmol;
+      setIs3DmolReady(ready);
+      if (ready) initViewer();
+    };
+
+    checkReady();
+    const timer = setInterval(checkReady, 300);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   const ensureViewerReady = async () => {
     for (let i = 0; i < 60; i += 1) {
@@ -178,14 +197,7 @@ export default function Feature3Page() {
     setRegionOptions(autoRegions);
   };
 
-  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.name.toLowerCase().endsWith('.pdb')) {
-      setStatus('请上传 .pdb 文件。');
-      return;
-    }
-
-    const content = await file.text();
+  const applyPdbContent = async (content: string, fileName: string, source: 'local' | 'remote') => {
     const viewer = await ensureViewerReady();
     if (!viewer) {
       setStatus('3Dmol 初始化失败，请刷新页面后重试。');
@@ -199,12 +211,38 @@ export default function Feature3Page() {
     viewer.render();
 
     setPdb(content);
-    setPdbFile(file);
+    setPdbFile(new File([content], fileName, { type: 'chemical/x-pdb' }));
     parseResidueInfo(content);
-    setStatus('文件已加载并显示。可添加选择项进行隐藏、分离与空间分离。');
+    setStatus(source === 'remote' ? '默认示例已加载，可添加选择项进行隐藏、分离与空间分离。' : '文件已加载并显示。可添加选择项进行隐藏、分离与空间分离。');
     setSelectedRegions([]);
     setIsolatedSelection(null);
     setHiddenSelections([]);
+  };
+
+  const loadRemotePdb = async (url: string) => {
+    if (!url) return;
+    try {
+      setStatus('正在加载默认示例...');
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const content = await res.text();
+      if (!content.trim()) throw new Error('empty content');
+      const remoteName = url.split('?')[0].split('/').pop() || 'default.pdb';
+      await applyPdbContent(content, remoteName, 'remote');
+    } catch {
+      setStatus('默认示例加载失败，请检查 /demo/5P21.pdb 是否可访问。');
+    }
+  };
+
+  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.toLowerCase().endsWith('.pdb')) {
+      setStatus('请上传 .pdb 文件。');
+      return;
+    }
+
+    const content = await file.text();
+    await applyPdbContent(content, file.name, 'local');
   };
 
   const residueTypes = useMemo(() => {
@@ -313,6 +351,16 @@ export default function Feature3Page() {
   }, [is3DmolReady, pdb]);
 
   useEffect(() => {
+    if (!is3DmolReady) return;
+    const boot = async () => {
+      const url = new URL(window.location.href);
+      const pdbUrl = url.searchParams.get('pdb') || DEFAULT_PDB_URL;
+      await loadRemotePdb(pdbUrl);
+    };
+    boot();
+  }, [is3DmolReady]);
+
+  useEffect(() => {
     if (!pdb) return;
     rebuildView();
   }, [selectedStyle, selectedColor]);
@@ -344,6 +392,7 @@ export default function Feature3Page() {
                   className="ui-input w-full"
                   disabled={!is3DmolReady}
                 />
+                <p className="text-xs text-slate-400">当前文件：{pdbFile?.name ?? '未选择'}</p>
 
                 <hr className="border-white/10" />
                 <p className="text-xs text-slate-400">选择结构（区域/原子/残基类型已支持下拉）</p>

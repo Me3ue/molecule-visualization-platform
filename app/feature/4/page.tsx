@@ -38,7 +38,9 @@ type AtomLabelItem = {
   atom: PickedAtom;
 };
 
-const distance = (a: PickedAtom, b: PickedAtom) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+const distance = (a: PickedAtom, b: PickedAtom) => { 
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+};
 
 const angleDeg = (a: PickedAtom, b: PickedAtom, c: PickedAtom) => {
   const v1 = [a.x - b.x, a.y - b.y, a.z - b.z];
@@ -78,6 +80,8 @@ const dihedralDeg = (a: PickedAtom, b: PickedAtom, c: PickedAtom, d: PickedAtom)
   const y = dot(cross(b1u, v), w);
   return (Math.atan2(y, x) * 180) / Math.PI;
 };
+
+const DEFAULT_PDB_URL = '/demo/1CRN.pdb';
 
 const atomText = (a: PickedAtom) => `${a.resname}${a.resid}:${a.name}${a.chain ? `:${a.chain}` : ''}`;
 
@@ -302,6 +306,8 @@ export default function Feature4Page() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const txt = await res.text();
       if (!txt.trim()) throw new Error('empty content');
+      const remoteName = url.split('?')[0].split('/').pop() || 'default.pdb';
+      setPdbFile(new File([txt], remoteName, { type: 'chemical/x-pdb' }));
       setPdbText(txt);
       afterPdbLoaded('remote');
     } catch {
@@ -317,7 +323,7 @@ export default function Feature4Page() {
 
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
-      setDemoPdbUrl(url.searchParams.get('pdb'));
+      setDemoPdbUrl(url.searchParams.get('pdb') || DEFAULT_PDB_URL);
     }
   }, []);
 
@@ -406,6 +412,7 @@ export default function Feature4Page() {
                 <div>
                   <label className="mb-2 block text-sm text-slate-300">上传 PDB</label>
                   <input type="file" accept=".pdb" className="ui-input w-full" onChange={(e) => setPdbFile(e.target.files?.[0] ?? null)} />
+                  <p className="mt-2 text-xs text-slate-400">当前文件：{pdbFile?.name ?? '未选择'}</p>
                   <button type="button" className="btn-primary mt-3 w-full" onClick={loadPdb} disabled={!canLoadLocalPdb}>
                     {isLoading ? '本地文件加载中...' : isRemoteLoading ? '在线示例加载中...' : !isReady ? '等待 3Dmol 加载...' : '加载本地结构'}
                   </button>
